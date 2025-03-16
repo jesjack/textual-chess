@@ -1,0 +1,22 @@
+.main {
+    layout: horizontal;
+    height: 8;
+}
+
+.board {
+    layout: grid;
+    grid-size: 8 8;
+    width: 16;
+    height: 100%;
+    /*border: solid $secondary;*/
+}
+
+.cell {
+    height: 100%;
+    width: 100%;
+    /*border: solid $secondary;*/
+}
+
+DataTable {
+    width: auto;/* Ajusta según sea necesario */
+}
