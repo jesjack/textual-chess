@@ -1,16 +1,21 @@
 import io
 import sys
 from dataclasses import dataclass, field
+
+from viztracer import VizTracer
 from singleton_decorator import singleton
 from enum import Enum
 from json.encoder import INFINITY
-from typing import List, Any, Coroutine, Optional, Generator, Tuple
+from typing import List, Any, Coroutine, Optional, Generator, Tuple, Annotated, Dict
 import rich
 from rich import inspect as rich_inspect
 from textual import events, log
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Label, DataTable
+
+# tracer = VizTracer()
+# tracer.start()
 
 def inspect(
         obj: Any,
@@ -91,6 +96,7 @@ class SpecialMoveConditions:
     only_move: bool = False # can't capture
     initial_only: bool = False # invalidate if isn't the first move
     only_capture: bool = False # only can move if enemy piece is in the target cell
+    capture_in_passing: bool = False # only can move if enemy piece is in the target cell
 
 
 @dataclass
@@ -98,7 +104,7 @@ class MoveVector:
     dx: int
     dy: int
     movement_type: MovementType
-    special_conditions: Optional[SpecialMoveConditions] = field(default_factory=SpecialMoveConditions)
+    special_conditions: SpecialMoveConditions = field(default_factory=SpecialMoveConditions)
 
     def __mul__(self, scalar: int) -> "MoveVector":
         return MoveVector(self.dx * scalar, self.dy * scalar, self.movement_type, self.special_conditions)
@@ -163,50 +169,37 @@ class Piece:
 
         elif self.piece_type == PieceType.P:
             # Para peones, los vectores dependen del color
-            if self.color == Color.WHITE:
-                # Peón blanco (se mueve hacia arriba)
-                vectors = [
-                    # Movimiento de avance normal (una casilla)
-                    MoveVector(0, 1, MovementType.FIXED, SpecialMoveConditions(
-                        only_move=True,
-                    )),
+            direction = 1 if self.color == Color.WHITE else -1
 
-                    # Movimiento inicial (dos casillas)
-                    MoveVector(0, 2, MovementType.FIXED, SpecialMoveConditions(
-                        initial_only=True,
-                        only_move=True,
-                    )),
+            vectors = [
+                # Movimiento de avance normal (una casilla)
+                MoveVector(0, direction, MovementType.FIXED, SpecialMoveConditions(
+                    only_move=True,
+                )),
 
-                    # Captura en diagonal
-                    MoveVector(1, 1, MovementType.FIXED, SpecialMoveConditions(
-                        only_capture=True,
-                    )),
-                    MoveVector(-1, 1, MovementType.FIXED, SpecialMoveConditions(
-                        only_capture=True,
-                    )),
-                ]
-            else:
-                # Peón negro (se mueve hacia abajo)
-                vectors = [
-                    # Movimiento de avance normal (una casilla)
-                    MoveVector(0, -1, MovementType.FIXED, SpecialMoveConditions(
-                        only_move=True,
-                    )),
+                # Movimiento inicial (dos casillas)
+                MoveVector(0, 2 * direction, MovementType.FIXED, SpecialMoveConditions(
+                    initial_only=True,
+                    only_move=True,
+                )),
 
-                    # Movimiento inicial (dos casillas)
-                    MoveVector(0, -2, MovementType.FIXED, SpecialMoveConditions(
-                        initial_only=True,
-                        only_move=True,
-                    )),
+                # Captura en diagonal
+                MoveVector(1, direction, MovementType.FIXED, SpecialMoveConditions(
+                    only_capture=True,
+                )),
+                MoveVector(-1, direction, MovementType.FIXED, SpecialMoveConditions(
+                    only_capture=True,
+                )),
 
-                    # Captura en diagonal
-                    MoveVector(1, -1, MovementType.FIXED, SpecialMoveConditions(
-                        only_capture=True,
-                    )),
-                    MoveVector(-1, -1, MovementType.FIXED, SpecialMoveConditions(
-                        only_capture=True,
-                    )),
-                ]
+                # Captura al paso
+                MoveVector(1, direction, MovementType.FIXED, SpecialMoveConditions(
+                    capture_in_passing=True,
+                )),
+                MoveVector(-1, direction, MovementType.FIXED, SpecialMoveConditions(
+                    capture_in_passing=True,
+                )),
+            ]
+
         else:
             vectors = []
 
@@ -218,13 +211,49 @@ class Move:
     piece: Piece
     col: Col
     row: Row
+    last_col: Col
+    last_row: Row
+    ate_piece: Optional[Piece] = None
 
 
 @singleton
 @dataclass
 class Control:
-    selected_piece: Optional[Piece] = None
+    selected_cell: Optional['Cell'] = None
     moves: List[Move] = field(default_factory=list)
+    en_passant_target: Optional['Cell'] = None
+    cells: Dict[Tuple[Col, Row], Tuple['Cell', List['Cell']]] = field(default_factory=dict)
+
+    def append_cell(self, cell: 'Cell'):
+        self.cells[(cell.col, cell.row)] = cell, []
+
+    def undo_last_move(self):
+        if self.moves:
+            last_move = self.moves.pop()
+            target_cell = self.get_cell(last_move.col, last_move.row)
+            original_cell = self.get_cell(last_move.last_col, last_move.last_row)
+            if target_cell and original_cell:
+                # Move the piece back to the original cell
+                original_cell.add_piece(last_move.piece)
+                # Remove the piece from the target cell
+                if last_move.ate_piece:
+                    target_cell.add_piece(last_move.ate_piece)
+                else:
+                    target_cell._piece = None
+                    target_cell.update("")
+                # Reset en_passant_target if necessary
+                self.en_passant_target = None
+
+    def get_cell(self, col, row):
+        return self.cells.get((col, row))[0]
+
+    def get_moves(self, col, row):
+        return self.cells.get((col, row))[1]
+
+    def reset_colors(self):
+        for cell, _ in self.cells.values():
+            cell.styles.background = Color.LIGHT_GRAY.value if (ord(cell.row.value) + ord(cell.col.value)) % 2 == 0 else Color.DARK_GRAY.value
+
 
 control = Control()
 
@@ -274,9 +303,13 @@ class Cell(Label):
         self.styles.background = Color.LIGHT_GRAY.value if (ord(row.value) + ord(col.value)) % 2 == 0 else Color.DARK_GRAY.value
         self.styles.color = Color.BLACK.value
         self.classes = "cell"
+        control.append_cell(self)
 
     def add_piece(self, piece: Piece):
         self._piece = piece
+        # Update the piece's current position to this cell's position
+        piece.col = self.col
+        piece.row = self.row
         self.update(piece.piece_type.value[0 if piece.color == Color.WHITE else 1])
 
     def on_event(self, event: events.Event) -> Coroutine[Any, Any, None]:
@@ -288,48 +321,180 @@ class Cell(Label):
             self.styles.background = self._prev_background
 
         if isinstance(event, events.Click):
-            for sibling in self.visible_siblings:
-                if isinstance(sibling, Cell):
-                    sibling.styles.background = Color.LIGHT_GRAY.value if (ord(sibling.row.value) + ord(sibling.col.value)) % 2 == 0 else Color.DARK_GRAY.value
-            if self._piece is not None:
-                if (control.moves and self._piece.color != control.moves[-1].piece.color) or (not control.moves and self._piece.color == Color.WHITE):
-                    self._prev_background = self.styles.background = Color.GREEN.value
-                    for vector in self._piece.movement_vectors:
-                        siblings = self.possible_cells(vector)
-                        for sibling in siblings:
-                            sibling.styles.background = Color.BLUE.value
+            def try_move():
+                if control.selected_cell is not None:
+                    for possible_cell in control.get_moves(self.col, self.row):
+                        if possible_cell == control.selected_cell:
+                            control.selected_cell.move_piece(self)
+                            control.selected_cell = None
+                            return
+                    control.selected_cell = None
+
+            control.reset_colors()
+
+            if self._piece is not None and ( # jugador selecciona su propia pieza
+                (
+                    control.moves
+                    and self._piece.color != control.moves[-1].piece.color
+                ) or
+                (
+                    not control.moves
+                    and self._piece.color == Color.WHITE
+                )
+            ):
+                self._prev_background = self.styles.background = Color.GREEN.value
+                control.selected_cell = self
+                for cell in control.get_moves(self.col, self.row):
+                    cell.styles.background = Color.BLUE.value
+            else:
+                try_move()
+
 
         return super().on_event(event)
 
-    def possible_cells(self, vector: MoveVector) -> Generator['Cell', Any, None]:
-        if vector.special_conditions is not None and vector.special_conditions.initial_only and self._piece in [move.piece for move in control.moves]:
+    def computing_1(self, vector: MoveVector):
+        # Verificar condición de movimiento inicial
+        if (
+                vector.special_conditions.initial_only
+                and self._piece in [move.piece for move in control.moves]
+        ):
             return
+
         i = 1
         while True:
             actual_vector = vector * i
             chr_col = chr(ord(self.col.value) + actual_vector.dx)
             chr_row = chr(ord(self.row.value) + actual_vector.dy)
-            if chr_col not in [col.value for col in Col] or chr_row not in [row.value for row in Row]:
+
+            # Validar límites del tablero
+            if (
+                    chr_col not in [col.value for col in Col]
+                    or chr_row not in [row.value for row in Row]
+            ):
                 break
+
+            # Buscar celdas hermanas visibles
             for sibling in self.visible_siblings:
                 if not isinstance(sibling, Cell):
                     continue
+
                 if sibling.col.value == chr_col and sibling.row.value == chr_row:
+                    # Caso 1: Celda ocupada
                     if sibling._piece is not None:
                         if sibling._piece.color != self._piece.color:
-                            if vector.special_conditions is not None and not vector.special_conditions.only_move:
+                            # Permitir captura si no es only_move
+                            if (
+                                    not vector.special_conditions.only_move
+                            ):
                                 yield sibling
-                            return
-                        else:
-                            return
-                    if vector.special_conditions is not None and not vector.special_conditions.only_capture:
-                        yield sibling
+                        return  # Bloquear más movimiento en esta dirección
+
+                    # Caso 2: Celda vacía
+                    else:
+                        # Caso especial: Captura al paso
+                        if vector.special_conditions.capture_in_passing:
+                            if sibling == control.en_passant_target:
+                                yield sibling
+                        # Movimiento normal si no es only_capture
+                        elif not vector.special_conditions.only_capture:
+                            yield sibling
+
+            # Controlar tipo de movimiento
             if vector.movement_type == MovementType.FIXED:
                 break
             i += 1
 
+    def compute_movements(self, vector: MoveVector, ignore_king=False):
+        for cell in self.computing_1(vector):
+            self.move_piece(cell)
+            if ignore_king or king_is_safe():
+                control.undo_last_move()
+                yield cell
+            else:
+                control.undo_last_move()
+                break
+
+
     def __rich_repr__(self):
         yield self.col.value + self.row.value
+
+    def move_piece(self, target):
+        piece = self._piece
+        original_col = self.col
+        original_row = self.row
+        ate_piece = target.get_piece()
+        control.moves.append(Move(piece, target.col, target.row, original_col, original_row, ate_piece))
+        target.add_piece(piece)
+        self._piece = None
+        self.update("")
+
+        # Manejar captura al paso
+        if piece.piece_type == PieceType.PAWN and target == control.en_passant_target:
+            # Calcular fila del peón capturado
+            captured_row = str(int(target.row.value) - 1) if piece.color == Color.WHITE else str(int(target.row.value) + 1)
+
+            # Buscar y eliminar el peón capturado
+            for sibling in self.visible_siblings:
+                if (isinstance(sibling, Cell) and
+                        sibling.col.value == target.col.value and
+                        sibling.row.value == captured_row):
+                    sibling._piece = None
+                    sibling.update("")
+                    break
+
+        # Resetear en_passant_target
+        control.en_passant_target = None
+
+        # Configurar nuevo en_passant_target si es movimiento doble
+        if piece.piece_type == PieceType.PAWN:
+            current_row = int(self.row.value)
+            target_row = int(target.row.value)
+
+            if abs(target_row - current_row) == 2:
+                en_passant_row = str(current_row + (1 if piece.color == Color.WHITE else -1))
+                for sibling in self.visible_siblings:
+                    if (isinstance(sibling, Cell) and
+                            sibling.col.value == self.col.value and
+                            sibling.row.value == en_passant_row):
+                        control.en_passant_target = sibling
+                        break
+
+    def get_piece(self):
+        return self._piece
+
+
+def king_is_safe() -> bool:
+    return True
+    # Si no hay movimientos, el rey está seguro
+    if not control.moves:
+        return True
+
+    last_move = control.moves[-1]
+    king_color = last_move.piece.color
+    opponent_color = Color.WHITE if king_color == Color.BLACK else Color.BLACK
+
+    # Encontrar la posición del rey actual
+    king_position: Optional[Cell] = None
+    for cell, _ in control.cells.values():
+        piece = cell.get_piece()
+        if piece and piece.piece_type == PieceType.KING and piece.color == king_color:
+            king_position = cell
+            break
+
+    if not king_position:
+        return False  # No debería ocurrir en un juego válido
+
+    # Verificar si alguna pieza del oponente puede atacar al rey
+    for cell, _ in control.cells.values():
+        piece = cell.get_piece()
+        if piece and piece.color == opponent_color:
+            # Calcular movimientos posibles sin considerar la seguridad del rey oponente
+            for vector in piece.movement_vectors:
+                for target_cell in cell.compute_movements(vector, ignore_king=True):
+                    if target_cell == king_position:
+                        return False
+
+    return True
 
 
 class MyApp(App):
@@ -352,6 +517,12 @@ class MyApp(App):
                                 break
                         yield cell
 
+                    for cell, moves in control.cells.values():
+                        if cell.get_piece() is not None:
+                            for vector in cell.get_piece().movement_vectors:
+                                moves.extend(cell.compute_movements(vector))
+                                log(moves) # porque en este segmento de codigo moves es una lista vacia?
+
             with Container(classes="table_container"):
 
                 moves_table = DataTable()
@@ -363,3 +534,5 @@ class MyApp(App):
                 yield moves_table
 
 MyApp().run()
+# tracer.stop()
+# tracer.save("trace.json")
