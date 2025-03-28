@@ -7,7 +7,7 @@ from chess import Board
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
-from textual.widgets import Label, DataTable, Button, Footer
+from textual.widgets import Label, DataTable, Button, Footer, Static
 
 
 class Color(Enum):
@@ -18,6 +18,45 @@ class Color(Enum):
     RED = "#ff0000"
     WHITE = "#ffffff"
     BLACK = "#000000"
+
+
+class CheckmateScreen(ModalScreen):
+    def __init__(self, winner: str):
+        """
+        Initialize the checkmate screen.
+
+        Args:
+            winner (str): The color of the winning player
+        """
+        super().__init__()
+        self.winner = winner
+
+    @property
+    def app(self) -> 'ChessApp':
+        app = super().app
+        if not isinstance(app, ChessApp):
+            raise ValueError("ChessSquare must be a child of ChessApp")
+        return app
+
+    def compose(self) -> ComposeResult:
+        """
+        Compose the checkmate screen with winner announcement.
+        """
+        yield Container(
+            Static(f"Checkmate! {self.winner} wins!", classes="checkmate-message"),
+            Button("New Game", id="new-game", classes="checkmate-button"),
+            Button("Quit", id="quit", classes="checkmate-button")
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """
+        Handle button press on checkmate screen.
+        """
+        if event.button.id == "new-game":
+            self.app.pop_screen()
+            self.app.reset_game()
+        elif event.button.id == "quit":
+            self.app.exit()
 
 
 class PromotionScreen(ModalScreen):
@@ -79,9 +118,6 @@ class PromotionScreen(ModalScreen):
 
 class ChessApp(App):
 
-    BINDINGS = [
-        ("q", "quit", "Quit"),
-    ]
     CSS = """
     .main {
         layout: horizontal;
@@ -102,7 +138,22 @@ class ChessApp(App):
         width: auto;
         height: 100%;
     }
+    .checkmate-message {
+        color: #ff0000;
+        text-align: center;
+        padding: 1;
+        margin-bottom: 2;
+    }
+    .checkmate-button {
+        margin: 1;
+        align: center middle;
+    }
     """
+
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("n", "new_game", "New Game"),
+    ]
 
     def __init__(self):
         super().__init__()
@@ -123,6 +174,22 @@ class ChessApp(App):
 
         yield Footer()
 
+    def action_new_game(self):
+        """
+        Start a new game by resetting the board and state.
+        """
+        self.reset_game()
+
+    def reset_game(self):
+        """
+        Reset the game to its initial state.
+        """
+        self.board.reset()
+        self.selected_square = None
+        self.moves = []
+        self.move_table.clear()
+        self.update_board()
+
     def update_board(self):
         for square in chess.SQUARES:
             self.query_one(f"#square-{square}", ChessSquare).update_piece()
@@ -139,6 +206,17 @@ class ChessApp(App):
         for square in chess.SQUARES:
             self.query_one(f"#square-{square}", ChessSquare).styles.background = self.query_one(f"#square-{square}", ChessSquare)._get_bg_color()
 
+    def check_game_end(self):
+        """
+        Check if the game has ended in checkmate.
+        """
+        if self.board.is_checkmate():
+            # Determine the winner based on the previous turn (who just checkmated)
+            winner = "White" if not self.board.turn else "Black"
+            self.push_screen(CheckmateScreen(winner))
+            return True
+        return False
+
     def handle_promotion(self, from_square, to_square, promotion_piece):
         """
         Handle pawn promotion by creating a move with the selected piece.
@@ -150,6 +228,9 @@ class ChessApp(App):
         self.update_move_table()
         self.reset_board_colors()
         self.selected_square = None
+
+        # Check for checkmate after move
+        self.check_game_end()
 
 
 class ChessSquare(Label):
@@ -235,6 +316,9 @@ class ChessSquare(Label):
                     self.app.update_move_table()
                     self.app.reset_board_colors()
                     self.app.selected_square = None
+
+                    # Check for checkmate after move
+                    self.app.check_game_end()
         finally:
             pass
 
