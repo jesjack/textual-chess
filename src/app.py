@@ -1,18 +1,23 @@
+import asyncio
+import tracemalloc
+from logging import exception
 from typing import Optional
 
 import chess
 from chess import Board
+from textual import log
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
 from textual.widgets import Label, DataTable, Button, Footer
+from typing_extensions import override
 
+from src.utils.debug import timeit, show_execution_times
 from .components.chess_square import ChessSquare
 from .components.promotion_screen import PromotionScreen
 from .components.checkmate_screen import CheckmateScreen
 from .utils.colors import Color
 
 import numpy as np
-
 
 class ChessApp(App):
 
@@ -63,8 +68,9 @@ class ChessApp(App):
 
     def compose(self) -> ComposeResult:
         with Container(classes="main"):
-            with Container(classes="board"):
-                for square in np.flipud(np.array(chess.SQUARES).reshape(8,8)).flatten():
+            with Container(classes="board") as board_container:
+                # Se usa la orientación blanca por defecto (turno de blancas)
+                for square in np.flipud(np.array(chess.SQUARES).reshape(8, 8)).flatten():
                     yield ChessSquare(square, self.board)
             with Container():
                 self.move_table.add_columns("Move", "White", "Black")
@@ -75,17 +81,92 @@ class ChessApp(App):
     def action_new_game(self):
         self.reset_game()
 
-    def reset_game(self):
+    async def reset_game(self):
         self.board.reset()
         self.selected_square = None
         self.moves = []
         self.move_table.clear()
-        self.update_board()
+        await self.update_board()
 
-    def update_board(self):
-        for square in chess.SQUARES:
-            self.query_one(f"#square-{square}", ChessSquare).update_piece()
+    @override
+    @timeit
+    def query_one(self, *args, **kwargs):
+        return super().query_one(*args, **kwargs)
 
+    @timeit
+    async def update_board(self):
+        await self.update_board_layout()
+        last_move = self.board.peek() if self.board.move_stack else None
+        if last_move is None: return
+        castling = self.board.is_castling(last_move)
+        en_passant = self.board.is_en_passant(last_move)
+        if castling or en_passant:
+            # Obtener todos los cuadros de una sola vez
+            squares = self.query(ChessSquare)
+            for square in squares:
+                square.update_piece()
+            return
+
+        # Actualizar solo los cuadros afectados por el último movimiento
+        from_square = last_move.from_square
+        to_square = last_move.to_square
+        square1 = self.query_one(f"#square-{from_square}", ChessSquare)
+        square2 = self.query_one(f"#square-{to_square}", ChessSquare)
+        square1.update_piece()
+        square2.update_piece()
+
+    @timeit
+    async def update_board_layout(self):
+        @timeit
+        def get_current_mapping():
+            return {widget.square: widget for widget in self.app.query(ChessSquare)}
+
+        @timeit
+        def calculate_desired_order():
+            if not hasattr(self, "_white_order"):
+                white_order = np.flipud(np.array(chess.SQUARES).reshape(8, 8)).flatten()
+                self._white_order = white_order
+                self._black_order = white_order[::-1]
+            return self._white_order if self.board.turn else self._black_order
+
+        @timeit
+        async def perform_swaps(current_mapping, desired_order):
+            current_squares = list(current_mapping.keys())
+            desired_squares = desired_order
+
+            swaps = 0
+            visited = set()
+
+            for i in range(64):
+                if i in visited:
+                    continue
+
+                if current_squares[i] == desired_squares[i]:
+                    continue
+
+                # Encuentra la posición del square deseado en el orden actual
+                j = current_squares.index(desired_squares[i])
+
+                # Realiza el swap
+                current_mapping[current_squares[i]].swap(current_mapping[current_squares[j]])
+                swaps += 1
+                visited.update([i, j])
+
+                # Actualiza la lista temporal
+                current_squares[i], current_squares[j] = current_squares[j], current_squares[i]
+
+            return swaps
+
+        # Ejecución principal
+        current_mapping = get_current_mapping()
+        desired_order = calculate_desired_order()
+
+        total_swaps = await perform_swaps(current_mapping, desired_order)
+        print(f"Realizados {total_swaps} swaps para reordenar el tablero")
+
+
+
+    @timeit
     def update_move_table(self):
         self.move_table.clear()
         moves = list(self.board.move_stack)
@@ -94,10 +175,13 @@ class ChessApp(App):
             black = self.moves[i + 1] if i+1 < len(self.moves) else ""
             self.move_table.add_row(str(i//2 + 1), white, black)
 
+    @timeit
     def reset_board_colors(self):
-        for square in chess.SQUARES:
-            self.query_one(f"#square-{square}", ChessSquare).styles.background = self.query_one(f"#square-{square}", ChessSquare)._get_bg_color()
+        squares = self.query(ChessSquare)
+        for square in squares:
+            square.styles.background = square._get_bg_color()
 
+    @timeit
     def check_game_end(self):
         if self.board.is_checkmate():
             winner = "White" if not self.board.turn else "Black"
@@ -105,11 +189,11 @@ class ChessApp(App):
             return True
         return False
 
-    def handle_promotion(self, from_square, to_square, promotion_piece):
-        self.pop_screen()
+    async def handle_promotion(self, from_square, to_square, promotion_piece):
+        await self.pop_screen()
         move = chess.Move(from_square, to_square, promotion_piece)
         self.moves.append(self.board.san_and_push(move))
-        self.update_board()
+        await self.update_board()
         self.update_move_table()
         self.reset_board_colors()
         self.selected_square = None
@@ -118,4 +202,6 @@ class ChessApp(App):
 
 
 if __name__ == "__main__":
+    tracemalloc.start()
     ChessApp().run()
+    # show_execution_times()
