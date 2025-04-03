@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from sqlalchemy.orm import Session
@@ -78,6 +77,11 @@ def show_execution_visuals():
     # Create traces for each function
     for idx, function in enumerate(unique_functions):
         function_data = df[df['function_name'] == function]
+        
+        # Skip functions with no data points
+        if len(function_data) == 0:
+            continue
+            
         color = get_color_from_name(function)
         
         # Add 3D scatter plot trace
@@ -103,6 +107,9 @@ def show_execution_visuals():
             customdata=function_data['execution_count']
         ))
 
+    # Get only functions that have data points
+    active_functions = [func for func in unique_functions if len(df[df['function_name'] == func]) > 0]
+    
     # Configure layout settings
     fig.update_layout(
         title={
@@ -117,8 +124,8 @@ def show_execution_visuals():
             ),
             yaxis=dict(
                 title='Function Name',
-                ticktext=list(unique_functions),
-                tickvals=list(range(len(unique_functions))),
+                ticktext=list(active_functions),  # Use active_functions instead of unique_functions
+                tickvals=list(range(len(active_functions))),
                 tickmode='array'
             ),
             zaxis_title='Average Execution Time (s)',
