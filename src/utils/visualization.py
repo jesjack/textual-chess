@@ -62,32 +62,33 @@ def show_execution_visuals():
     # Initialize the figure
     fig = go.Figure()
 
-    # Generate random colors based on function names
+    # Get active functions and their positions first
+    active_functions = []
+    function_positions = {}
+    
+    for function in sorted(df['function_name'].unique()):
+        function_data = df[df['function_name'] == function]
+        if len(function_data) > 0 and not function_data['session_number'].empty:
+            function_positions[function] = len(active_functions)
+            active_functions.append(function)
+
+    # Generate colors based on function names
     def get_color_from_name(func_name, alpha=0.7):
-        # Use hash of function name as seed for reproducibility
-        hash_val = hash(func_name) & 0xFFFFFFFF  # Ensure positive 32-bit value
-        # Generate RGB values deterministically without using numpy random
-        r = (hash_val & 0xFF) / 255.0
-        g = ((hash_val >> 8) & 0xFF) / 255.0
-        b = ((hash_val >> 16) & 0xFF) / 255.0
+        # More stable color generation
+        color_seed = sum((ord(c) * (i + 1) * 19) for i, c in enumerate(func_name))
+        r = ((color_seed * 12347) % 200 + 55) / 255.0
+        g = ((color_seed * 45673) % 200 + 55) / 255.0
+        b = ((color_seed * 98765) % 200 + 55) / 255.0
         return f'rgba({int(r*255)}, {int(g*255)}, {int(b*255)}, {alpha})'
     
-    unique_functions = df['function_name'].unique()
-    
-    # Create traces for each function
-    for idx, function in enumerate(unique_functions):
+    # Create traces only for active functions
+    for function in active_functions:
         function_data = df[df['function_name'] == function]
-        
-        # Skip functions with no data points
-        if len(function_data) == 0:
-            continue
-            
         color = get_color_from_name(function)
         
-        # Add 3D scatter plot trace
         fig.add_trace(go.Scatter3d(
             x=function_data['session_number'],
-            y=[idx] * len(function_data),
+            y=[function_positions[function]] * len(function_data),
             z=function_data['avg_time'],
             mode='lines+markers',
             name=function,
@@ -107,9 +108,6 @@ def show_execution_visuals():
             customdata=function_data['execution_count']
         ))
 
-    # Get only functions that have data points
-    active_functions = [func for func in unique_functions if len(df[df['function_name'] == func]) > 0]
-    
     # Configure layout settings
     fig.update_layout(
         title={
@@ -119,12 +117,12 @@ def show_execution_visuals():
         scene=dict(
             xaxis_title='Session Number',
             xaxis=dict(
-                dtick=1,  # Force integer ticks
-                tickformat='d'  # Display as integers
+                dtick=1,
+                tickformat='d'
             ),
             yaxis=dict(
                 title='Function Name',
-                ticktext=list(active_functions),  # Use active_functions instead of unique_functions
+                ticktext=active_functions,  # Use active_functions directly
                 tickvals=list(range(len(active_functions))),
                 tickmode='array'
             ),
