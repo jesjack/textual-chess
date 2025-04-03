@@ -41,31 +41,32 @@ class ExecutionTracker:
             self._db_initialized = True
 
     async def save_execution_data(self, db_uri="execution_data.db"):
-        await self._ensure_db_initialized(db_uri)  # Ensure DB is initialized before saving
+        await self._ensure_db_initialized(db_uri)
         engine = get_async_engine(db_uri)
         async_session = async_sessionmaker(engine, class_=AsyncSession)
         
         async with async_session() as session:
-            try:
-                result = await session.execute(
-                    select(ExecutionSession)
-                    .where(ExecutionSession.session_id == self.execution_session_id)
-                )
-                existing_session = result.scalar_one_or_none()
-                
-                if existing_session is None:
-                    git_commit = self.get_git_info()
-                    await save_execution_session(
-                        session=session,
-                        execution_session_id=self.execution_session_id,
-                        execution_times=self.execution_times,
-                        execution_order=self.execution_order,
-                        timeline_events=self.timeline_events,
-                        git_commit=git_commit
+            async with session.begin():
+                try:
+                    result = await session.execute(
+                        select(ExecutionSession)
+                        .where(ExecutionSession.session_id == self.execution_session_id)
                     )
-            except Exception as e:
-                print(f"Error saving execution data: {e}")
-                raise
+                    existing_session = result.scalar_one_or_none()
+                    
+                    if existing_session is None:
+                        git_commit = self.get_git_info()
+                        await save_execution_session(
+                            session=session,
+                            execution_session_id=self.execution_session_id,
+                            execution_times=self.execution_times,
+                            execution_order=self.execution_order,
+                            timeline_events=self.timeline_events,
+                            git_commit=git_commit
+                        )
+                except Exception as e:
+                    print(f"Error saving execution data: {e}")
+                    raise
 
     def _setup_handlers(self):
         atexit.register(self._handle_exit)
@@ -204,6 +205,3 @@ def timeit(func):
 
 def show_execution_times():
     _tracker.show_execution_times()
-
-async def save_execution_data(db_uri="execution_data.db"):
-    await _tracker.save_execution_data(db_uri)

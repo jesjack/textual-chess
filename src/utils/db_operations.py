@@ -17,50 +17,47 @@ async def save_execution_session(
     timeline_events: list,
     git_commit: Optional[str] = None
 ):
-    async with session.begin():
-        # Create new session
-        new_session = ExecutionSession(
-            session_id=execution_session_id,
-            timestamp=time.time()
-        )
-        session.add(new_session)
-        
-        # Add execution times
-        for func_name, times in execution_times.items():
-            for exec_time in times:
-                session.add(ExecutionTime(
-                    session_id=execution_session_id,
-                    function_name=func_name,
-                    execution_time=exec_time
-                ))
-        
-        # Add execution order
-        for idx, (func_name, exec_time) in enumerate(execution_order):
-            session.add(ExecutionOrder(
+    # Create new session
+    new_session = ExecutionSession(
+        session_id=execution_session_id,
+        timestamp=time.time()
+    )
+    session.add(new_session)
+    
+    # Add execution times
+    for func_name, times in execution_times.items():
+        for exec_time in times:
+            session.add(ExecutionTime(
                 session_id=execution_session_id,
-                order_index=idx,
                 function_name=func_name,
                 execution_time=exec_time
             ))
-        
-        # Add timeline events
-        for func_name, start, end in timeline_events:
-            session.add(TimelineEvent(
-                session_id=execution_session_id,
-                function_name=func_name,
-                start_time=start,
-                end_time=end
-            ))
-        
-        # Add Git tracking if available
-        if git_commit:
-            session.add(GitTracking(
-                session_id=execution_session_id,
-                git_commit=git_commit,
-                timestamp=time.time()
-            ))
-        
-        await session.commit()
+    
+    # Add execution order
+    for idx, (func_name, exec_time) in enumerate(execution_order):
+        session.add(ExecutionOrder(
+            session_id=execution_session_id,
+            order_index=idx,
+            function_name=func_name,
+            execution_time=exec_time
+        ))
+    
+    # Add timeline events
+    for func_name, start, end in timeline_events:
+        session.add(TimelineEvent(
+            session_id=execution_session_id,
+            function_name=func_name,
+            start_time=start,
+            end_time=end
+        ))
+    
+    # Add Git tracking if available
+    if git_commit:
+        session.add(GitTracking(
+            session_id=execution_session_id,
+            git_commit=git_commit,
+            timestamp=time.time()
+        ))
 
 def get_execution_stats(session: Session):
     query = (
