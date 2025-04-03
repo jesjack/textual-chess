@@ -66,10 +66,12 @@ def show_execution_visuals():
     # Generate random colors based on function names
     def get_color_from_name(func_name, alpha=0.7):
         # Use hash of function name as seed for reproducibility
-        hash_val = abs(hash(func_name)) % (2**32 - 1)  # Ensure positive value within valid range
-        np.random.seed(hash_val)
-        rgb = np.random.rand(3)
-        return f'rgba({int(rgb[0]*255)}, {int(rgb[1]*255)}, {int(rgb[2]*255)}, {alpha})'
+        hash_val = hash(func_name) & 0xFFFFFFFF  # Ensure positive 32-bit value
+        # Generate RGB values deterministically without using numpy random
+        r = (hash_val & 0xFF) / 255.0
+        g = ((hash_val >> 8) & 0xFF) / 255.0
+        b = ((hash_val >> 16) & 0xFF) / 255.0
+        return f'rgba({int(r*255)}, {int(g*255)}, {int(b*255)}, {alpha})'
     
     unique_functions = df['function_name'].unique()
     
