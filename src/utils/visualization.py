@@ -123,7 +123,8 @@ def show_execution_visuals():
             )
         ),
         width=1000,
-        height=700,
+        height=800,  # Increased height to accommodate slider
+        margin=dict(t=100, b=100),  # Added margins for slider space
         showlegend=True,
         legend=dict(
             yanchor="top",
@@ -138,12 +139,18 @@ def show_execution_visuals():
     if total_sessions > 1:
         fig.update_layout(
             sliders=[{
-                'active': max(0, initial_visible_sessions - 2),  # Ensure active is not negative
+                'active': max(0, initial_visible_sessions - 2),
                 'currentvalue': {
                     'prefix': 'Last sessions shown: ',
-                    'font': {'size': 16}
+                    'font': {'size': 16},
+                    'visible': True,
+                    'xanchor': 'center'
                 },
-                'pad': {'t': 50},
+                'pad': {'t': 50, 'b': 10},
+                'len': 0.9,  # Slider length
+                'x': 0.1,    # Slider x position
+                'y': 0,      # Slider y position
+                'yanchor': 'bottom',
                 'steps': [
                     {
                         'method': 'update',
