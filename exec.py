@@ -1,5 +1,8 @@
 from subprocess import Popen, CREATE_NEW_CONSOLE, run
 import threading
+import sys
+
+from src.utils.visualization import show_execution_visuals
 
 def monitor_process(process, others):
     process.wait()  # Espera a que el proceso se cierre
@@ -9,6 +12,12 @@ def monitor_process(process, others):
             run(["taskkill", "/F", "/T", "/PID", str(p.pid)], shell=True)
 
 if __name__ == "__main__":
+
+    args = sys.argv[1:]
+    if '--graph' in args:
+        show_execution_visuals()
+        sys.exit()
+
     # Iniciar las ventanas
     p1 = Popen(["cmd", "/k", "textual console"], creationflags=CREATE_NEW_CONSOLE)
     p2 = Popen(["cmd", "/k", "textual run --dev ./main.py"], creationflags=CREATE_NEW_CONSOLE)

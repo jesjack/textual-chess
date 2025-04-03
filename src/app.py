@@ -125,41 +125,29 @@ class ChessApp(App):
             return self._white_order if self.board.turn else self._black_order
 
         @timeit
-        async def perform_swaps(current_mapping, desired_order):
-            current_squares = list(current_mapping.keys())
-            desired_squares = desired_order
+        async def reorder_squares(board_container, desired_order, current_mapping):
+            # Create new ordered list of widgets
+            new_order = []
+            for square_num in desired_order:
+                widget = current_mapping[square_num]
+                new_order.append(widget)
+            
+            # Remove all squares from container
+            squares = list(self.query(ChessSquare))
+            await board_container.remove(*squares)
+            
+            # Add them back in the correct order
+            await board_container.mount(*new_order)
+            
+            return len(squares)
 
-            swaps = 0
-            visited = set()
-
-            for i in range(64):
-                if i in visited:
-                    continue
-
-                if current_squares[i] == desired_squares[i]:
-                    continue
-
-                # Encuentra la posición del square deseado en el orden actual
-                j = current_squares.index(desired_squares[i])
-
-                # Realiza el swap
-                current_mapping[current_squares[i]].swap(current_mapping[current_squares[j]])
-                swaps += 1
-                visited.update([i, j])
-
-                # Actualiza la lista temporal
-                current_squares[i], current_squares[j] = current_squares[j], current_squares[i]
-
-            return swaps
-
-        # Ejecución principal
-        current_mapping = get_current_mapping()
+        # Main execution
+        board_container = self.query_one(".board")
         desired_order = calculate_desired_order()
-
-        total_swaps = await perform_swaps(current_mapping, desired_order)
-        print(f"Realizados {total_swaps} swaps para reordenar el tablero")
-
-
+        current_mapping = get_current_mapping()
+        
+        squares_count = await reorder_squares(board_container, desired_order, current_mapping)
+        print(f"Tablero reordenado con {squares_count} cuadrados")
 
     @timeit
     def update_move_table(self):

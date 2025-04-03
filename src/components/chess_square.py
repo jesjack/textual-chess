@@ -1,6 +1,5 @@
 import chess
 from chess import Board
-from textual import events
 from textual.widgets import Label
 
 from .promotion_screen import PromotionScreen
@@ -17,7 +16,7 @@ class ChessSquare(Label):
         self.update_piece()
 
     @property
-    def app(self) -> 'ChessApp':
+    def app(self) -> 'ChessApp': # noqa: F821
         app = super().app
         if app.__class__.__name__ != "ChessApp":
             raise ValueError("ChessSquare must be a child of ChessApp")
@@ -59,16 +58,6 @@ class ChessSquare(Label):
             self.styles.color = Color.WHITE.value if piece.color else Color.BLACK.value
         else:
             self.update(" ")
-            # self.styles.color = Color.BLACK.value
-
-    # async def on_event(self, event: events.Event):
-    #     if isinstance(event, events.Click):
-    #         if self.app.selected_square is None:
-    #             if self.board.color_at(self.square) == self.board.turn:
-    #                 self._select_square()
-    #         else:
-    #             await self._try_move()
-    #     return super().on_event(event)
 
     @timeit
     def on_click(self):
