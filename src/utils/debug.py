@@ -8,7 +8,8 @@ import uuid
 import subprocess
 from collections import defaultdict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from .models import get_async_engine, init_db
+from sqlalchemy import select
+from .models import get_async_engine, init_db, ExecutionSession
 from .visualization import show_execution_visuals
 from .db_operations import save_execution_session
 
@@ -23,6 +24,12 @@ class ExecutionTracker:
         return cls._instance
 
     def _initialize(self):
+        # Create event loop if it doesn't exist
+        try:
+            asyncio.get_event_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            
         self.execution_times = defaultdict(list)
         self.execution_order = []
         self.timeline_events = []
@@ -82,7 +89,7 @@ class ExecutionTracker:
     def show_execution_times(self):
         if self._execution_data_shown:
             return
-        _execution_data_shown = True
+        self._execution_data_shown = True  # Fix: use self. instead of local variable
 
         try:
             self.fetch_last_session_data()
@@ -129,15 +136,23 @@ class ExecutionTracker:
         
         try:
             async with async_session() as session:
-                git_commit = self.get_git_info()
-                await save_execution_session(
-                    session=session,
-                    execution_session_id=self.execution_session_id,
-                    execution_times=self.execution_times,
-                    execution_order=self.execution_order,
-                    timeline_events=self.timeline_events,
-                    git_commit=git_commit
+                # Check if session already exists
+                result = await session.execute(
+                    select(ExecutionSession)
+                    .where(ExecutionSession.session_id == self.execution_session_id)
                 )
+                existing_session = result.scalar_one_or_none()
+                
+                if existing_session is None:
+                    git_commit = self.get_git_info()
+                    await save_execution_session(
+                        session=session,
+                        execution_session_id=self.execution_session_id,
+                        execution_times=self.execution_times,
+                        execution_order=self.execution_order,
+                        timeline_events=self.timeline_events,
+                        git_commit=git_commit
+                    )
         except Exception as e:
             print(f"Error saving execution data: {e}")
             raise
