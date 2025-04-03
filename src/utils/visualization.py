@@ -59,7 +59,7 @@ def show_execution_visuals():
     # Calculate view parameters
     total_sessions = len(session_map)  # Use the number of unique sessions
     initial_visible_sessions = min(10, total_sessions)
-
+    
     # Initialize the figure
     fig = go.Figure()
 
@@ -131,42 +131,47 @@ def show_execution_visuals():
             xanchor="right",
             x=0.99,
             bgcolor="rgba(255, 255, 255, 0.8)"
-        ),
-        # Add session range slider
-        sliders=[{
-            'active': initial_visible_sessions - 2,
-            'currentvalue': {
-                'prefix': 'Last sessions shown: ',
-                'font': {'size': 16}
-            },
-            'pad': {'t': 50},
-            'steps': [
-                {
-                    'method': 'update',
-                    'label': str(i),
-                    'args': [
-                        {'visible': True},
-                        {
-                            'scene.xaxis.range': [
-                                max(1, total_sessions - i + 1),
-                                total_sessions + 0.5
-                            ]
-                        }
-                    ]
-                } for i in range(2, total_sessions + 1)
-            ]
-        }]
-    )
-
-    # Set initial view range
-    fig.update_layout(
-        scene=dict(
-            xaxis=dict(range=[
-                max(1, total_sessions - initial_visible_sessions + 1),
-                total_sessions + 0.5
-            ])
         )
     )
+
+    # Add session range slider only if there are enough sessions
+    if total_sessions > 1:
+        fig.update_layout(
+            sliders=[{
+                'active': max(0, initial_visible_sessions - 2),  # Ensure active is not negative
+                'currentvalue': {
+                    'prefix': 'Last sessions shown: ',
+                    'font': {'size': 16}
+                },
+                'pad': {'t': 50},
+                'steps': [
+                    {
+                        'method': 'update',
+                        'label': str(i),
+                        'args': [
+                            {'visible': True},
+                            {
+                                'scene.xaxis.range': [
+                                    max(1, total_sessions - i + 1),
+                                    total_sessions + 0.5
+                                ]
+                            }
+                        ]
+                    } for i in range(2, total_sessions + 1)
+                ]
+            }]
+        )
+
+    # Set initial view range only if there are sessions
+    if total_sessions > 0:
+        fig.update_layout(
+            scene=dict(
+                xaxis=dict(range=[
+                    max(1, total_sessions - initial_visible_sessions + 1),
+                    total_sessions + 0.5
+                ])
+            )
+        )
 
     # Display the interactive plot
     fig.show()
