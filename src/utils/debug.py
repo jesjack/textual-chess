@@ -24,12 +24,6 @@ class ExecutionTracker:
         return cls._instance
 
     def _initialize(self):
-        # Create event loop if it doesn't exist
-        try:
-            asyncio.get_event_loop()
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
-            
         self.execution_times = defaultdict(list)
         self.execution_order = []
         self.timeline_events = []

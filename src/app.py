@@ -1,21 +1,16 @@
-import asyncio
 import tracemalloc
-from logging import exception
 from typing import Optional
 
 import chess
 from chess import Board
-from textual import log
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal
-from textual.widgets import Label, DataTable, Button, Footer
+from textual.containers import Container
+from textual.widgets import DataTable, Footer
 from typing_extensions import override
 
-from src.utils.debug import timeit, show_execution_times
+from src.utils.debug import timeit
 from .components.chess_square import ChessSquare
-from .components.promotion_screen import PromotionScreen
 from .components.checkmate_screen import CheckmateScreen
-from .utils.colors import Color
 
 import numpy as np
 
@@ -68,7 +63,7 @@ class ChessApp(App):
 
     def compose(self) -> ComposeResult:
         with Container(classes="main"):
-            with Container(classes="board") as board_container:
+            with Container(classes="board"):
                 # Se usa la orientación blanca por defecto (turno de blancas)
                 for square in np.flipud(np.array(chess.SQUARES).reshape(8, 8)).flatten():
                     yield ChessSquare(square, self.board)
