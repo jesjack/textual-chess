@@ -109,6 +109,10 @@ def show_execution_visuals():
         },
         scene=dict(
             xaxis_title='Session Number',
+            xaxis=dict(
+                dtick=1,  # Force integer ticks
+                tickformat='d'  # Display as integers
+            ),
             yaxis=dict(
                 title='Function Name',
                 ticktext=list(unique_functions),
