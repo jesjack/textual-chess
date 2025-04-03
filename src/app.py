@@ -5,6 +5,7 @@ import chess
 from chess import Board
 from textual.app import App, ComposeResult
 from textual.containers import Container
+from textual.widget import Widget
 from textual.widgets import DataTable, Footer
 from typing_extensions import override
 
@@ -125,7 +126,7 @@ class ChessApp(App):
             return self._white_order if self.board.turn else self._black_order
 
         @timeit
-        async def reorder_squares(board_container, desired_order, current_mapping):
+        async def reorder_squares(board_container: Container, desired_order, current_mapping):
             # Create new ordered list of widgets
             new_order = []
             for square_num in desired_order:
@@ -134,7 +135,7 @@ class ChessApp(App):
             
             # Remove all squares from container
             squares = list(self.query(ChessSquare))
-            await board_container.remove(*squares)
+            await board_container.remove_children(ChessSquare)
             
             # Add them back in the correct order
             await board_container.mount(*new_order)
