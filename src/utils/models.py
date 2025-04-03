@@ -63,6 +63,6 @@ def get_sync_engine(db_path):
 def get_async_engine(db_path):
     return create_async_engine(f"sqlite+aiosqlite:///{db_path}")
 
-def init_db(db_path):
-    engine = get_sync_engine(db_path)
-    Base.metadata.create_all(engine)
+async def init_db(engine):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

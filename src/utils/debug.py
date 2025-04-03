@@ -8,7 +8,7 @@ import uuid
 import subprocess
 from collections import defaultdict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from .models import get_async_engine
+from .models import get_async_engine, init_db
 from .visualization import show_execution_visuals
 from .db_operations import save_execution_session
 
@@ -30,10 +30,17 @@ class ExecutionTracker:
         self.execution_session_id = str(uuid.uuid4())
         self._setup_handlers()
         self.git_performance_branch = "performance_tracking"
+        # Initialize database
+        asyncio.run(self._init_database())
+
+    async def _init_database(self, db_uri="execution_data.db"):
+        engine = get_async_engine(db_uri)
+        await init_db(engine)
+        await engine.dispose()
 
     def _setup_handlers(self):
         atexit.register(self._handle_exit)
-        sys.excepthook = self._handle_excepthook
+        sys.excepthook = self._sync_handle_excepthook  # Changed to sync version
         
         for sig_name in ['SIGINT', 'SIGTERM', 'SIGHUP']:
             if hasattr(signal, sig_name):
@@ -43,19 +50,34 @@ class ExecutionTracker:
                     pass
 
     def _handle_exit(self, signum=None, frame=None):
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(self.save_execution_data())
-            self.fetch_last_session_data()  # Now calling synchronously
-        else:
-            asyncio.run(self.save_execution_data())
-            self.show_execution_times()
-        sys.exit(0)
+        try:
+            loop = asyncio.new_event_loop()  # Create new event loop
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._async_cleanup())
+            loop.close()
+        except Exception as e:
+            print(f"Error during exit cleanup: {e}", file=sys.stderr)
+        finally:
+            sys.exit(0)
 
-    async def _handle_excepthook(self, exc_type, exc_value, traceback):
-        await self.save_execution_data()
-        self.show_execution_times()
-        sys.__excepthook__(exc_type, exc_value, traceback)
+    def _sync_handle_excepthook(self, exc_type, exc_value, traceback):
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._async_cleanup())
+            loop.close()
+        except Exception as e:
+            print(f"Error during exception cleanup: {e}", file=sys.stderr)
+        finally:
+            sys.__excepthook__(exc_type, exc_value, traceback)
+
+    async def _async_cleanup(self):
+        """Centralized async cleanup method"""
+        try:
+            await self.save_execution_data()
+            self.show_execution_times()
+        except Exception as e:
+            print(f"Error during async cleanup: {e}", file=sys.stderr)
 
     def show_execution_times(self):
         if self._execution_data_shown:
