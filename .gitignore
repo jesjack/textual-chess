@@ -1,3 +1,6 @@
 .venv
 test
 ./trace.json
+execution_data.db-wal
+execution_data.db-shm
+execution_data.db
