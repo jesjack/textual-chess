@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import chess
 from chess import Board
 from textual.widgets import Label
@@ -6,7 +8,7 @@ from .promotion_screen import PromotionScreen
 from ..utils.colors import Color
 from ..utils.debug import timeit
 
-if __name__ == "__main__":
+if TYPE_CHECKING:
     from src.app import ChessApp
 
 class ChessSquare(Label):
@@ -18,11 +20,8 @@ class ChessSquare(Label):
         self.update_piece()
 
     @property
-    def app(self) -> 'ChessApp':
-        app = super().app
-        if not isinstance(app, ChessApp):
-            raise ValueError("ChessSquare must be a child of ChessApp")
-        return app
+    def app(self) -> "ChessApp":
+        return super().app # type: ignore
 
     @timeit
     def swap(self, other: 'ChessSquare'):
