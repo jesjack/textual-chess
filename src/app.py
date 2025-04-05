@@ -23,6 +23,17 @@ class ChessApp(App):
         layout: horizontal;
         height: 100%;
     }
+    .chess_board {
+        layout: grid;
+        grid-size: 8 8;
+        width: 16;
+        height: 8;
+        background: red;
+    }
+    .cell {
+        height: 100%;
+        width: 100%;
+    }
     .move_history {
         width: auto;
         height: 100%;

@@ -11,20 +11,6 @@ class ChessBoard(Container):
     It is a grid layout that contains 64 squares, each represented by a ChessSquare widget.
     """
 
-    CSS = """
-    .chess_board {
-        layout: grid;
-        grid-size: 8 8;
-        width: 16;
-        height: 8;
-        background: red;
-    }
-    .cell {
-        height: 100%;
-        width: 100%;
-    }
-    """
-
     def __init__(self, board: Board, invert=False):
         super().__init__(classes="chess_board")
         self.board = board
@@ -36,5 +22,5 @@ class ChessBoard(Container):
         """
         Compose the chessboard by yielding ChessSquare widgets for each square.
         """
-        # for square in self.squares:
-        #     yield ChessSquare(square, self.board)
+        for square in self.squares:
+            yield ChessSquare(square, self.board)
