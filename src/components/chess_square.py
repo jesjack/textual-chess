@@ -9,7 +9,7 @@ from ..utils.debug import timeit
 
 class ChessSquare(Label):
     def __init__(self, square: int, board: Board):
-        super().__init__(id=f"square-{square}", classes="cell")
+        super().__init__(classes="cell")
         self.square = square
         self.board = board
         self.styles.background = self._get_bg_color()
@@ -76,7 +76,8 @@ class ChessSquare(Label):
         self.app.selected_square = self.square
         for move in self.board.legal_moves:
             if move.from_square == self.square:
-                self.app.query_one(f"#square-{move.to_square}").styles.background = Color.BLUE.value
+                target_square = self.app.query_one(ChessSquare, lambda sq: sq.square == move.to_square)
+                target_square.styles.background = Color.BLUE.value
 
     @timeit
     async def _try_move(self):
