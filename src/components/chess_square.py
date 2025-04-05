@@ -6,6 +6,8 @@ from .promotion_screen import PromotionScreen
 from ..utils.colors import Color
 from ..utils.debug import timeit
 
+if __name__ == "__main__":
+    from src.app import ChessApp
 
 class ChessSquare(Label):
     def __init__(self, square: int, board: Board):
@@ -16,9 +18,9 @@ class ChessSquare(Label):
         self.update_piece()
 
     @property
-    def app(self) -> 'ChessApp': # noqa: F821
+    def app(self) -> 'ChessApp':
         app = super().app
-        if app.__class__.__name__ != "ChessApp":
+        if not isinstance(app, ChessApp):
             raise ValueError("ChessSquare must be a child of ChessApp")
         return app
 
@@ -59,7 +61,6 @@ class ChessSquare(Label):
         else:
             self.update(" ")
 
-    @timeit
     def on_click(self):
         @timeit
         async def process():
@@ -76,7 +77,8 @@ class ChessSquare(Label):
         self.app.selected_square = self.square
         for move in self.board.legal_moves:
             if move.from_square == self.square:
-                target_square = self.app.query(ChessSquare).filter(lambda sq: sq.square == move.to_square).first()
+                target_square = filter(lambda sq: sq.square == move.to_square, self.app.query(ChessSquare).results())
+                target_square = next(target_square)
                 target_square.styles.background = Color.BLUE.value
 
     @timeit
@@ -94,7 +96,7 @@ class ChessSquare(Label):
                 if move.promotion:
                     async def handle_promotion(p):
                         await self.app.handle_promotion(self.app.selected_square, self.square, p)
-                    self.app.push_screen(PromotionScreen(self.board.turn, handle_promotion))
+                    await self.app.push_screen(PromotionScreen(self.board.turn, handle_promotion))
                 else:
                     self.app.moves.append(self.board.san_and_push(move))
                     await self.app.update_board()
