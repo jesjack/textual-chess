@@ -5,16 +5,12 @@ import chess
 from chess import Board
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widget import Widget
 from textual.widgets import DataTable, Footer
-from typing_extensions import override
 
 from src.components.chess_board import ChessBoard
 from src.utils.debug import timeit
 from .components.chess_square import ChessSquare
 from .components.checkmate_screen import CheckmateScreen
-
-import numpy as np
 
 class ChessApp(App):
 
@@ -64,13 +60,13 @@ class ChessApp(App):
         self.promotion_move = None
         self.white_board_container = ChessBoard(self.board, invert=False)
         self.black_board_container = ChessBoard(self.board, invert=True)
+        self.white_board_container.display = True
+        self.black_board_container.display = False
 
     def compose(self) -> ComposeResult:
         with Container(id="main"):
-            if self.board.turn:
-                yield self.white_board_container
-            else:
-                yield self.black_board_container
+            yield self.white_board_container
+            yield self.black_board_container
             with Container():
                 self.move_table.add_columns("Move", "White", "Black")
                 yield self.move_table
@@ -96,20 +92,9 @@ class ChessApp(App):
 
     @timeit
     def update_board_layout(self):
-        # TODO: intercambiar tableros
-        chess_board = self.query_one(ChessBoard)
+        self.white_board_container.display = not self.white_board_container.display
+        self.black_board_container.display = not self.black_board_container.display
 
-        container: Container = self.query_one("#main")
-        if self.board.turn:
-            if chess_board == self.white_board_container:
-                return
-            chess_board.remove()
-            container.mount(self.white_board_container)
-        else:
-            if chess_board == self.black_board_container:
-                return
-            chess_board.remove()
-            container.mount(self.black_board_container)
 
     @timeit
     def update_move_table(self):
