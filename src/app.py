@@ -19,7 +19,7 @@ import numpy as np
 class ChessApp(App):
 
     CSS = """
-    .main {
+    #main {
         layout: horizontal;
         height: 100%;
     }
@@ -66,7 +66,7 @@ class ChessApp(App):
         self.black_board_container = ChessBoard(self.board, invert=True)
 
     def compose(self) -> ComposeResult:
-        with Container(classes="main"):
+        with Container(id="main"):
             if self.board.turn:
                 yield self.white_board_container
             else:
