@@ -76,7 +76,7 @@ class ChessSquare(Label):
         self.app.selected_square = self.square
         for move in self.board.legal_moves:
             if move.from_square == self.square:
-                target_square = self.app.query_one(ChessSquare, lambda sq: sq.square == move.to_square)
+                target_square = self.app.query(ChessSquare).filter(lambda sq: sq.square == move.to_square).first()
                 target_square.styles.background = Color.BLUE.value
 
     @timeit
